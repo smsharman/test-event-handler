@@ -178,15 +178,17 @@
 
 (defn handle-event
   [event]
-  (let [nsevent (synergy-specs.events/wrap-std-event event)]
+  (let [cevent (json/read-str (get (get (first (get event :Records)) :Sns) :Message) :key-fn keyword)
+        nsevent (synergy-specs.events/wrap-std-event cevent)]
+    (info "Received the raw event : " (print-str event))
+    (info "converted event " (print-str cevent))
     (info "Received the following event : " (print-str nsevent))
     (process-event nsevent)))
-;;    (generate-lambda-return 200 "ok")))
 
 
 (deflambdafn test-event-handler.core.Route
              [in out ctx]
-             "Takes a JSON event in standard Synergy Event form, convert to map and send to routing function"
+             "Takes a JSON event in standard Synergy Event form from the Message field, convert to map and send to routing function"
              (let [event (json/read (io/reader in) :key-fn keyword)
                    res (handle-event event)]
                (with-open [w (io/writer out)]
