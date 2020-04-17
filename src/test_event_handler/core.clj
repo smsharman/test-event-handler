@@ -69,7 +69,7 @@
                                     :key1 "value1"
                                     :key2 "value2"
                                     }
-                   :eventTimestamp "2018-10-09T12:24:03.390+0000"
+                   :eventTimestamp "2020-04-17T11:23:10.904Z"
                    })
 
 ;; Invalid message - incorrect eventAction
@@ -101,7 +101,7 @@
                                     :key1 "value1"
                                     :key2 "value2"
                                     }
-                   :eventTimestamp "2018-10-09T12:24:03.390+0000"
+                   :eventTimestamp "2020-04-17T11:23:10.904Z"
                    })
 
 ;; Invalid message - missing eventVersion
@@ -116,7 +116,7 @@
                                     :key1 "value1"
                                     :key2 "value2"
                                     }
-                   :eventTimestamp "2018-10-09T12:24:03.390+0000"
+                   :eventTimestamp "2020-04-17T11:23:10.904Z"
                    })
 
 (defn gen-status-map
@@ -176,6 +176,8 @@
           (send-to-topic failQueue event "I don't route this!"))
       (gen-status-map false "invalid-message-format" (get validateEvent :return-value)))))
 
+;; Note, we have the handler and then the processor in order to allow for testing. Processor takes
+;; namespaced event
 (defn handle-event
   [event]
   (let [cevent (json/read-str (get (get (first (get event :Records)) :Sns) :Message) :key-fn keyword)
