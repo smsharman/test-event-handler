@@ -1,15 +1,14 @@
 (ns test-event-handler.core
 (:require [uswitch.lambada.core :refer [deflambdafn]]
-  [clojure.data.json :as json]
-  [clojure.java.io :as io]
-  [cognitect.aws.client.api :as aws]
-  [synergy-specs.events :as synspec]
-  [synergy-events-stdlib.core :as stdlib]
-  [clojure.spec.alpha :as s]
-  [taoensso.timbre :as timbre
-   :refer [log trace debug info warn error fatal report
-           logf tracef debugf infof warnf errorf fatalf reportf
-           spy get-env]])
+          [cheshire.core :as json]
+          [clojure.java.io :as io]
+          [cognitect.aws.client.api :as aws]
+          [synergy-specs.events :as synspec]
+          [synergy-events-stdlib.core :as stdlib]
+          [taoensso.timbre
+           :refer [log trace debug info warn error fatal report
+                   logf tracef debugf infof warnf errorf fatalf reportf
+                   spy get-env]])
 (:gen-class))
 
 ;; Declare clients for AWS services required
@@ -31,75 +30,9 @@
 (def successQueue "syntest1")
 (def failQueue "syntest-sayhello")
 
-;; Test messages to be used during development
-;; Valid message
-(def testMessage1 {
-                   :eventId        "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :parentId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :originId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :userId         "1"
-                   :orgId          "1"
-                   :eventVersion   1
-                   :eventAction    "event1"
-                   :eventData      {
-                                    :key1 "value1"
-                                    :key2 "value2"
-                                    }
-                   :eventTimestamp "2020-04-17T11:23:10.904Z"
-                   })
-
-;; Invalid message - incorrect eventAction
-(def testMessage2 {
-                   :eventId        "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :parentId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :originId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :userId         "1"
-                   :orgId          "1"
-                   :eventVersion   1
-                   :eventAction    "event2"
-                   :eventData      {
-                                    :key1 "value1"
-                                    :key2 "value2"
-                                    }
-                   :eventTimestamp "2018-10-09T12:24:03.390+0000"
-                   })
-
-;; Invalid message - incorrect eventVersion
-(def testMessage3 {
-                   :eventId        "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :parentId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :originId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :userId         "1"
-                   :orgId          "1"
-                   :eventVersion   2
-                   :eventAction    "event1"
-                   :eventData      {
-                                    :key1 "value1"
-                                    :key2 "value2"
-                                    }
-                   :eventTimestamp "2020-04-17T11:23:10.904Z"
-                   })
-
-;; Invalid message - missing eventVersion
-(def testMessage4 {
-                   :eventId        "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :parentId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :originId       "7a5a815b-2e52-4d40-bec8-c3fc06edeb36"
-                   :userId         "1"
-                   :orgId          "1"
-                   :eventAction    "event1"
-                   :eventData      {
-                                    :key1 "value1"
-                                    :key2 "value2"
-                                    }
-                   :eventTimestamp "2020-04-17T11:23:10.904Z"
-                   })
-
-;; Specific handler logic here
-
-
-(defn process-event [event]
+(defn process-event
   "Process an inbound event - usually emit a success/failure message at the end"
+  [event]
   (if (empty? @snsArnPrefix)
     (stdlib/set-up-topic-table snsArnPrefix eventStoreTopic ssm))
   (let [validateEvent (stdlib/validate-message event)]
@@ -114,10 +47,12 @@
 ;; namespaced event
 (defn handle-event
   [event]
-  (let [cevent (json/read-str (get (get (first (get event :Records)) :Sns) :Message) :key-fn keyword)
+  (let [deduced-type (stdlib/check-event-type event)
+        event-content (stdlib/get-event-data event deduced-type) ;; If this is always going to be SNS message then could use :sns
+        cevent (json/parse-string event-content true)
         nsevent (synergy-specs.events/wrap-std-event cevent)]
     (info "Received the raw event : " (print-str event))
-    (info "converted event " (print-str cevent))
+    (info "Converted event " (print-str cevent))
     (info "Received the following event : " (print-str nsevent))
     (process-event nsevent)))
 
@@ -125,7 +60,7 @@
 (deflambdafn test-event-handler.core.Route
              [in out ctx]
              "Takes a JSON event in standard Synergy Event form from the Message field, convert to map and send to routing function"
-             (let [event (json/read (io/reader in) :key-fn keyword)
+             (let [event (json/parse-stream (io/reader in) true)
                    res (handle-event event)]
                (with-open [w (io/writer out)]
-                 (json/write res w))))
+                 (json/generate-stream res w {:pretty true}))))

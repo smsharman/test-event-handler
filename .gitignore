@@ -13,3 +13,5 @@ pom.xml.asc
 
 # Default ignored files
 /test-event-handler.iws
+/test-event-handler.iml
+/test-event-handler.ipr
